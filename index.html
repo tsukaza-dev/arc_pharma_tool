@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARC Raiders Inventory Helper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #facc15; /* Amber-400 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111; /* Dark background for track */
+        }
+        /* Style for the input focus */
+        #item-input:focus {
+            /* Using Amber for the retro glow/focus ring */
+            box-shadow: 0 0 0 3px rgba(252, 211, 77, 0.5); 
+        }
+        .keep-status {
+            /* Subtle pulse effect using the lime color */
+            animation: pulse-ring 1s infinite;
+        }
+        @keyframes pulse-ring {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(132, 204, 22, 0.7); } /* Lime-600 */
+            50% { box-shadow: 0 0 0 8px rgba(132, 204, 22, 0); }
+        }
+        /* Style for the suggestions container */
+        #suggestions-container {
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 10;
+        }
+        .suggestion-item:hover {
+            background-color: #292524; /* Stone-800 on hover */
+        }
+        .alphabet-button {
+            transition: all 0.1s ease-in-out;
+        }
+        .alphabet-button:hover {
+            background-color: #ca8a04; /* Amber-600 */
+            transform: translateY(-1px);
+        }
+        .alphabet-button.active {
+            background-color: #facc15; /* Amber-400 */
+            color: #1c1917; /* Stone-900 */
+            font-weight: bold;
+        }
+    </style>
+</head>
+<!-- Color Scheme: Pure Black Background (bg-black) -->
+<body class="bg-black text-stone-100 min-h-screen p-4 sm:p-8 font-sans flex items-center justify-center">
+
+    <div class="w-full max-w-xl bg-stone-800 p-6 sm:p-8 rounded-xl shadow-2xl border border-stone-700">
+        
+        <!-- Header with Logo Styling -->
+        <div class="mb-6 flex items-center">
+            <!-- Logo Stripes Container -->
+            <div class="w-5 sm:w-6 h-10 sm:h-12 flex flex-col justify-between mr-4 shrink-0" aria-hidden="true">
+                <div class="h-1 sm:h-2 w-full bg-red-500 rounded-full"></div>
+                <div class="h-1 sm:h-2 w-full bg-yellow-400 rounded-full"></div>
+                <div class="h-1 sm:h-2 w-full bg-emerald-400 rounded-full"></div>
+                <div class="h-1 sm:h-2 w-full bg-sky-400 rounded-full"></div>
+            </div>
+
+            <!-- Title Text -->
+            <h1 class="font-extrabold leading-tight">
+                <span class="block text-4xl sm:text-5xl" style="color: #f0ebd4;">
+                    ARC Raiders
+                </span>
+                <span class="block text-xl sm:text-2xl text-stone-100 mt-1 sm:mt-2 opacity-90">
+                    Inventory Helper
+                </span>
+            </h1>
+        </div>
+        
+        <p class="text-stone-400 mb-4 -mt-3">Type an item name or click a letter to browse the full item list.</p>
+
+        <!-- NEW Alphabet Navigation -->
+        <div id="alphabet-nav" class="mb-4 flex flex-wrap justify-center gap-1 sm:gap-2 p-2 bg-stone-700 rounded-lg">
+            <!-- Buttons will be generated here by generateAlphabetNav() -->
+        </div>
+        
+        <!-- Search Input and Suggestions Container -->
+        <div class="relative mb-8">
+            <input type="text" id="item-input" oninput="handleInput()" placeholder="e.g., Hornet Driver, Alarm Clock, Toaster"
+                   class="w-full p-3 pl-10 bg-stone-700 border border-stone-600 rounded-lg text-lg text-white placeholder-stone-500 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150">
+            <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-stone-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            
+            <!-- Suggestions Dropdown -->
+            <div id="suggestions-container" class="absolute w-full mt-1 bg-stone-800 border border-stone-600 rounded-lg shadow-xl hidden">
+                <!-- Suggestions will be populated here -->
+            </div>
+        </div>
+
+        <!-- Results Display -->
+        <!-- Note: This container is now used for both single search result AND the A-Z list -->
+        <div id="results" class="min-h-[120px] bg-stone-700 p-5 rounded-lg border border-stone-600 flex flex-col items-center justify-center text-center">
+            <p id="result-text" class="text-2xl font-semibold text-stone-400 transition-opacity duration-300">
+                Start typing or select a letter.
+            </p>
+            <!-- details-text is now used for both detail and list container -->
+            <div id="list-container" class="w-full hidden">
+                <!-- List items go here -->
+            </div>
+            <p id="details-text" class="text-sm mt-2 text-stone-500"></p>
+        </div>
+        
+        <!-- Static Warning Note for Community Data -->
+        <div class="mt-6 p-3 bg-yellow-900 bg-opacity-30 border border-yellow-600 rounded-lg text-yellow-300 text-sm">
+            ⚠️ **Community Data Warning:** This information is based on static community knowledge and may not reflect the absolute latest game updates. Always confirm critical items in-game.
+        </div>
+
+    </div>
+
+    <script>
+        // Item data compiled from Arc Raiders community guides (Quests, Workbench Upgrades, Expedition)
+        // Item data is now sorted alphabetically by key for better list display
+        const itemDatabase = {
+            "accordion": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Metal Parts, 2x Wires" },
+            "advanced electrical components": { status: "KEEP", detail: "Required for Gear Bench Lvl 3 (5x), Utility Station Lvl 3 (5x), and Expedition Phase 4 (5x). (Total: 15)", requiredTotal: 15 },
+            "advanced mechanical components": { status: "KEEP", detail: "Required for Gunsmith Level 3 (5x).", requiredTotal: 5 },
+            "alarm clock": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Electrical Comp., 1x Rubber Parts" },
+            "antiseptic": { status: "KEEP", detail: "Required for Quest: Doctor's Orders (2x). Also 8x needed for Medical Lab Lvl 3. (Total: 10)", requiredTotal: 10 },
+            "apricot": { status: "KEEP", detail: "Required for Scrappy Levels 3 & 5 (total 15x).", requiredTotal: 15 },
+            "arc alloy": { status: "KEEP", detail: "Required for Quest: Clearer Skies (3x) and various crafting. Keep a stack of 20+.", requiredTotal: 20 },
+            "arc circuitry": { status: "KEEP", detail: "Required for Refiner Level 3 (10x).", requiredTotal: 10 },
+            "arc coolant": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Chemicals" },
+            "arc flex rubber": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 6x Rubber Parts" },
+            "arc motion core": { status: "KEEP", detail: "Required for Refiner Level 2 (5x).", requiredTotal: 5 },
+            "arc performance steel": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 8x Metal Parts" },
+            "arc powercell": { status: "KEEP", detail: "Topside Material. Required for Workshop Lvl 2 and 3. Keep a stack of 10+.", requiredTotal: 10 },
+            "arc synthetic resin": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Rubber Parts, 2x Wires" },
+            "arc thermo lining": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Durable Cloth" },
+            "bastion cell": { status: "KEEP", detail: "Required for Gear Bench Level 3 (6x).", requiredTotal: 6 },
+            "battery": { status: "KEEP", detail: "Required for Expeditions (~30x) and Quests (~8x). Keep a large stack.", requiredTotal: 40 },
+            "bicycle pump": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Metal Parts, 1x Rubber Parts" },
+            "bloated tuna can": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $850 Coins" },
+            "blown fuses": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $600 Coins" },
+            "bombardier cell": { status: "KEEP", detail: "Required for Refiner Level 3 (6x).", requiredTotal: 6 },
+            "breathtaking snow globe": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $1,200 Coins" },
+            "broken flashlight": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 2x Electrical Comp." },
+            "broken guidance system": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Electrical Comp., 2x Wires" },
+            "broken handheld radio": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Wires, 1x Electrical Comp." },
+            "broken riot shield": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 7x Metal Parts, 1x Rubber Parts" },
+            "broken taser": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Electrical Comp., 2x Wires" },
+            "burned arc circuitry": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Wires, 1x Arc Alloy" },
+            "camera lens": { status: "KEEP", detail: "Required for the Quest: Movie Night (1x).", requiredTotal: 1 },
+            "candle holder": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 6x Metal Parts" },
+            "cat bed": { status: "KEEP", detail: "Required for Scrappy Level 4 (1x).", requiredTotal: 1 },
+            "chemicals": { status: "KEEP", detail: "Basic Material. Required for Medical Lab Lvl 3. Keep a stack of 10+.", requiredTotal: 10 },
+            "cracked bioscanner": { status: "KEEP", detail: "Required for Medical Lab Level 2 (2x).", requiredTotal: 2 },
+            "crude explosives": { status: "KEEP", detail: "Required for Explosives Station Level 2 (2x).", requiredTotal: 2 },
+            "coffee pot": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $950 Coins" },
+            "coolant": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Chemicals" },
+            "cooling coil": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Metal Parts" },
+            "cooling fan": { status: "KEEP", detail: "Required for Expedition Phase 2 (5x).", requiredTotal: 5 },
+            "crumpled plastic bottle": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 1x Rubber Parts" },
+            "damaged arc motion core": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Arc Alloy, 1x Wires" },
+            "damaged arc powercell": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Arc Alloy, 2x Wires" },
+            "damaged fireball burner": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Arc Alloy, 1x Metal Parts" },
+            "damaged heat sink": { status: "KEEP", detail: "Required for Utility Station Level 2 (2x).", requiredTotal: 2 },
+            "damaged hornet driver": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Arc Alloy" },
+            "damaged rocketeer driver": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Arc Alloy" },
+            "damaged snitch scanner": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Arc Alloy, 2x Electrical Comp." },
+            "damaged tick pod": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Arc Alloy, 1x Durable Cloth" },
+            "damaged wasp driver": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Arc Alloy" },
+            "dart board": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $700 Coins" },
+            "deflated football": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Rubber Parts, 1x Durable Cloth" },
+            "degraded arc rubber": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Rubber Parts" },
+            "diving googles": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 2x Rubber Parts" },
+            "dog collar": { status: "KEEP", detail: "Required for Scrappy Level 1 (1x).", requiredTotal: 1 },
+            "dried-out arc resin": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Rubber Parts, 1x Arc Alloy" },
+            "durable cloth": { status: "KEEP", detail: "Required for Quest: Doctor's Orders (1x) and other crafting. Keep a stack of 10+.", requiredTotal: 10 },
+            "electrical components": { status: "KEEP", detail: "Used for various progression and crafting. Keep a stack of 20+.", requiredTotal: 20 },
+            "exodus modules": { status: "KEEP", detail: "Required for Expedition Phase 3 (1x).", requiredTotal: 1 },
+            "expired pasta": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $500 Coins" },
+            "expired respirator": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Durable Cloth" },
+            "explosive compound": { status: "KEEP", detail: "Required for Explosive Station Level 3 (5x).", requiredTotal: 5 },
+            "fireball burner": { status: "KEEP", detail: "Required for Quest: What Goes Around (1x). Also 8x needed for Refiner Level 2. (Total: 9)", requiredTotal: 9 },
+            "fine wristwatch": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $2,100 Coins" },
+            "fried motherboard": { status: "KEEP", detail: "Required for Utility Station Level 3 (3x).", requiredTotal: 3 },
+            "frying pan": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 6x Metal Parts" },
+            "garlic press": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Metal Parts" },
+            "headphones": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Wires, 1x Rubber Parts" },
+            "hornet driver": { status: "KEEP", detail: "Required for Quests (3x) and Gear Bench Level 2 (5x). Keep a stack. (Total: 8)", requiredTotal: 8 },
+            "household cleaner": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 2x Chemicals" },
+            "humidifier": { status: "KEEP", detail: "Required for Expedition Phase 4 (5x).", requiredTotal: 5 },
+            "ice cream scooper": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Metal Parts, 1x Rubber Parts" },
+            "impure arc coolant": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Chemicals, 1x Arc Alloy" },
+            "industrial battery": { status: "KEEP", detail: "Required for Gear Bench Level 3 (3x).", requiredTotal: 3 },
+            "industrial charger": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Wires, 3x Electrical Comp." },
+            "industrial magnet": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 6x Metal Parts, 2x Wires" },
+            "laboratory reagents": { status: "KEEP", detail: "Required for Explosives Station Level 3 (3x).", requiredTotal: 3 },
+            "lance's mixtape (5th edition)": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $1,500 Coins" },
+            "leaper pulse unit": { status: "KEEP", detail: "Required for Quest: Into The Fray (1x), Utility Station Lvl 3 (4x), and Expedition (3x). (Total: 8)", requiredTotal: 8 },
+            "lemon": { status: "KEEP", detail: "Required for Scrappy Level 3 (3x).", requiredTotal: 3 },
+            "light bulb": { status: "KEEP", detail: "Required for Expedition Phase 3 (5x).", requiredTotal: 5 },
+            "magnetic accelerator": { status: "KEEP", detail: "Required for Expedition Phase 4 (3x).", requiredTotal: 3 },
+            "metal brackets": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Metal Parts" },
+            "metal parts": { status: "KEEP", detail: "Basic Material, always useful. Keep a stack of 20+.", requiredTotal: 20 },
+            "motor": { status: "KEEP", detail: "Required for Refiner Level 3 (3x).", requiredTotal: 3 },
+            "mushroom": { status: "KEEP", detail: "Required for Scrappy Level 5 (12x).", requiredTotal: 12 },
+            "music album": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $1,100 Coins" },
+            "music box": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $1,800 Coins" },
+            "number plate": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Metal Parts" },
+            "olives": { status: "KEEP", detail: "Required for Scrappy Level 4 (6x).", requiredTotal: 6 },
+            "painted box": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $1,300 Coins" },
+            "playing cards": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $400 Coins" },
+            "polluted air filter": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 2x Durable Cloth, 1x Rubber Parts" },
+            "pop trigger": { status: "KEEP", detail: "Required for Explosives Station Level 2 (5x).", requiredTotal: 5 },
+            "portable tv": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Electrical Comp., 3x Wires" },
+            "poster of natural wonders": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $650 Coins" },
+            "pottery": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $900 Coins" },
+            "power bank": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 2x Battery, 2x Wires" },
+			"power cable": { status: "KEEP", detail: "Required for Gear Bench Level 2 (3x).", requiredTotal: 3 },
+            "power rod": { status: "KEEP", detail: "Required for Quest: Tribute To Toledo (1x).", requiredTotal: 1 },
+            "prickly pear": { status: "KEEP", detail: "Required for Scrappy Level 4 (6x).", requiredTotal: 6 },
+            "projector": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Electrical Comp., 3x Wires" },
+            "radio": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Wires, 2x Electrical Comp." },
+            "red coral jewelry": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $2,500 Coins" },
+            "remote control": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 2x Wires, 1x Rubber Parts" },
+            "ripped safety vest": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Durable Cloth" },
+            "rocketeer driver": { status: "KEEP", detail: "Required for Quest: Out Of The Shadows (1x). Also 3x needed for Explosives Station Lvl 3. (Total: 4)", requiredTotal: 4 },
+            "rosary": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $1,600 Coins" },
+            "rubber pad": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Rubber Parts" },
+            "rubber parts": { status: "KEEP", detail: "Basic Material, always useful. Keep a stack of 20+.", requiredTotal: 20 },
+            "ruined accordion": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Metal Parts, 3x Durable Cloth" },
+            "ruined baton": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Rubber Parts" },
+            "ruined handcuffs": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Metal Parts" },
+            "ruined parachute": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 6x Durable Cloth" },
+            "ruined riot shield": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 7x Metal Parts, 2x Rubber Parts" },
+            "ruined tactical vest": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Durable Cloth, 1x Rubber Parts" },
+            "rusted bolts": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 2x Metal Parts" },
+            "rusted gears": { status: "KEEP", detail: "Required for Gunsmith Level 3 (3x).", requiredTotal: 3 },
+            "rusted shut medical kit": { status: "KEEP", detail: "Required for Medical Lab Level 3 (3x).", requiredTotal: 3 },
+            "rusted tools": { status: "KEEP", detail: "Required for Gunsmith Level 2 (3x).", requiredTotal: 3 },
+            "rusty arc steel": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 7x Metal Parts, 1x Arc Alloy" },
+            "sensors": { status: "KEEP", detail: "Required for Expedition Phase 3 (20x).", requiredTotal: 20 },
+            "sentinel firing core": { status: "KEEP", detail: "Required for Gunsmith Level 3 (4x).", requiredTotal: 4 },
+            "silver teaspoon set": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $2,200 Coins" },
+            "snitch scanner": { status: "KEEP", detail: "Required for Quests (2x) and Utility Station Level 2 (6x). Keep a stack. (Total: 8)", requiredTotal: 8 },
+            "spotter relay": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Electrical Comp., 2x Wires" },
+            "spring cushion": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Steel Spring, 2x Durable Cloth" },
+            "statuette": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $1,750 Coins" },
+            "steel spring": { status: "KEEP", detail: "Used for various progression and crafting. Keep a stack of 15+.", requiredTotal: 15 },
+            "surveyor vault": { status: "KEEP", detail: "Required for Quest: Mixed Signals (1x). Also 5x needed for Medical Lab Lvl 3. (Total: 6)", requiredTotal: 6 },
+            "synthesized fuel": { status: "KEEP", detail: "Required for Explosives Station Level 2 (3x).", requiredTotal: 3 },
+            "syringe": { status: "KEEP", detail: "Required for Quest: Doctor's Orders (1x).", requiredTotal: 1 },
+            "tattered arc lining": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 5x Durable Cloth, 1x Arc Alloy" },
+            "tattered clothes": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 2x Durable Cloth" },
+            "thermostat": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Electrical Comp., 1x Metal Parts" },
+            "tick pod": { status: "KEEP", detail: "Required for Quest: Small, But Sinister (1x). Also 8x needed for Medical Lab Level 2. (Total: 9)", requiredTotal: 9 },
+            "toaster": { status: "KEEP", detail: "Required for Refiner Level 2 (3x).", requiredTotal: 3 },
+            "torn book": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $300 Coins" },
+            "torn blanket": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Durable Cloth" },
+            "turbo pump": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 4x Metal Parts, 2x Rubber Parts" },
+            "vase": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $1,050 Coins" },
+            "very comfortable pillow": { status: "KEEP", detail: "Required for Scrappy Level 5 (3x).", requiredTotal: 3 },
+            "volcanic rock": { status: "SELL SAFELY (TRINKET)", detail: "Vendor trash. Do NOT recycle.", return: "Sells for: $800 Coins" },
+            "wasp driver": { status: "KEEP", detail: "Required for Quests (3x) and Gunsmith Level 2 (8x). Keep a stack. (Total: 11)", requiredTotal: 11 },
+            "water filter": { status: "RECYCLE/SELL SAFELY", detail: "No known quest or upgrade use. Recycle for basic materials.", return: "Recycles into: 3x Rubber Parts, 2x Durable Cloth" },
+            "water pump": { status: "KEEP", detail: "Required for Quest: Unexpected Initiative (1x).", requiredTotal: 1 },
+            "wires": { status: "KEEP", detail: "Required for Quests (e.g., Trash Into Treasure 6x, After Rain Comes 5x) and various crafting. Keep a stack of 20+.", requiredTotal: 20 },
+        };
+
+        const resultText = document.getElementById('result-text');
+        const detailsText = document.getElementById('details-text');
+        const resultsDiv = document.getElementById('results');
+        const itemInput = document.getElementById('item-input');
+        const suggestionsContainer = document.getElementById('suggestions-container');
+        const alphabetNav = document.getElementById('alphabet-nav');
+        const listContainer = document.getElementById('list-container');
+        
+        // State for the currently active alphabet filter
+        let activeFilter = null;
+
+        // --- Utility Functions ---
+
+        // Helper function to capitalize the first letter of each word
+        function formatItemName(key) {
+            return key.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        }
+        
+        // Function to select a suggested item (used by the suggestion dropdown)
+        function selectSuggestion(itemKey) {
+            itemInput.value = formatItemName(itemKey);
+            suggestionsContainer.classList.add('hidden');
+            // Clear list view state
+            activeFilter = null;
+            updateAlphabetNavState();
+            checkItemStatus(itemKey);
+        }
+
+        // --- A-Z List Filter Logic ---
+
+        function generateAlphabetNav() {
+            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+            const allButton = `<button onclick="filterAndDisplayList(null)" data-filter="null" class="alphabet-button bg-yellow-700 text-white font-medium text-xs sm:text-sm px-2 py-1 rounded-md active">ALL</button>`;
+            alphabetNav.innerHTML = allButton + alphabet.map(letter => 
+                `<button onclick="filterAndDisplayList('${letter}')" data-filter="${letter}" class="alphabet-button bg-stone-600 text-stone-200 font-medium text-xs sm:text-sm px-2 py-1 rounded-md">${letter}</button>`
+            ).join('');
+            activeFilter = null;
+            updateAlphabetNavState();
+        }
+
+        function updateAlphabetNavState() {
+            document.querySelectorAll('.alphabet-button').forEach(btn => {
+                const filterValue = btn.getAttribute('data-filter');
+                if (filterValue === activeFilter || (activeFilter === null && filterValue === 'null')) {
+                    btn.classList.add('active', 'bg-yellow-400', 'text-stone-900');
+                    btn.classList.remove('bg-stone-600', 'text-stone-200');
+                } else {
+                    btn.classList.remove('active', 'bg-yellow-400', 'text-stone-900');
+                    btn.classList.add('bg-stone-600', 'text-stone-200');
+                }
+            });
+        }
+
+        function filterAndDisplayList(letter = null) {
+            // 1. Enter list view mode
+            itemInput.value = ''; // Clear input
+            suggestionsContainer.classList.add('hidden');
+            activeFilter = letter;
+            updateAlphabetNavState();
+
+            // 2. Filter the data
+            const keys = Object.keys(itemDatabase).sort();
+            const filteredKeys = keys.filter(key => {
+                if (letter === null) return true; // 'ALL' mode
+                return key.startsWith(letter.toLowerCase());
+            });
+
+            // 3. Update the display mode
+            resultsDiv.classList.remove('keep-status', 'bg-lime-900', 'border-lime-700', 'bg-red-900', 'border-red-700');
+            resultsDiv.classList.add('bg-stone-700', 'border-stone-600', 'p-4');
+            resultsDiv.classList.remove('justify-center', 'items-center');
+
+            resultText.textContent = letter === null ? 'All Items' : `Items Starting With '${letter}'`;
+            resultText.classList.remove('text-stone-400', 'text-lime-300', 'text-red-300');
+            resultText.classList.add('text-white', 'text-2xl', 'mb-4');
+            
+            detailsText.classList.add('hidden');
+            listContainer.classList.remove('hidden');
+            
+            // 4. Generate the list HTML
+            if (filteredKeys.length === 0) {
+                listContainer.innerHTML = `<p class="text-stone-400 text-center py-4">No items found starting with '${letter}'.</p>`;
+                return;
+            }
+
+            const listHtml = filteredKeys.map(key => {
+                const item = itemDatabase[key];
+                const displayName = formatItemName(key);
+                
+                const isKeep = item.status.includes("KEEP");
+                const statusColor = isKeep ? 'text-lime-400' : 'text-red-400';
+                
+                let statusBadge = item.status.split(' ')[0]; // e.g., "KEEP" or "RECYCLE/SELL"
+                let requiredDisplay = '';
+
+                // Add the required total to the status badge for KEEP items
+                if (isKeep && item.requiredTotal !== undefined) {
+                    requiredDisplay = `<span class="text-yellow-400 font-extrabold ml-1">(${item.requiredTotal}x)</span>`;
+                }
+
+                return `
+                    <div class="p-2 border-b border-stone-600 last:border-b-0 flex justify-between items-center hover:bg-stone-600 rounded-md transition duration-150">
+                        <span class="text-sm sm:text-base text-white">${displayName}</span>
+                        <div class="text-right flex items-center">
+                            <span class="${statusColor} font-semibold text-xs sm:text-sm mr-2">${statusBadge}</span>
+                            ${requiredDisplay}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            listContainer.innerHTML = `<div class="w-full space-y-1 mt-2">${listHtml}</div>`;
+        }
+
+        // --- Single Item Lookup Logic ---
+
+        // Main input handler
+        function handleInput() {
+            const input = itemInput.value.trim().toLowerCase();
+            
+            // If typing, switch back to single search mode
+            if (input.length > 0) {
+                activeFilter = null;
+                listContainer.classList.add('hidden');
+                detailsText.classList.remove('hidden');
+                updateAlphabetNavState();
+            }
+
+            checkItemStatus(input);
+            updateSuggestions(input);
+        }
+
+        // Update the suggestions dropdown
+        function updateSuggestions(input) {
+            suggestionsContainer.innerHTML = '';
+
+            if (input.length < 3) {
+                suggestionsContainer.classList.add('hidden');
+                return;
+            }
+
+            const matchingKeys = Object.keys(itemDatabase)
+                .filter(key => key.includes(input))
+                .slice(0, 8); // Limit to 8 suggestions
+
+            if (matchingKeys.length === 0) {
+                suggestionsContainer.classList.add('hidden');
+                return;
+            }
+
+            matchingKeys.forEach(key => {
+                const item = itemDatabase[key];
+                const displayName = formatItemName(key);
+                
+                // Determine the status text and color
+                const isKeep = item.status.includes("KEEP");
+                const statusColor = isKeep ? 'text-lime-400' : 'text-red-400';
+                
+                let statusBadge = item.status.split(' ')[0]; // e.g., "KEEP" or "RECYCLE/SELL"
+                
+                // Add the required total to the status badge for KEEP items
+                if (isKeep && item.requiredTotal !== undefined) {
+                    statusBadge = `${statusBadge} ${item.requiredTotal}x`;
+                }
+
+                const suggestionDiv = document.createElement('div');
+                suggestionDiv.className = 'suggestion-item p-3 cursor-pointer border-b border-stone-700 last:border-b-0 flex justify-between items-center text-sm transition duration-100';
+                suggestionDiv.onclick = () => selectSuggestion(key);
+
+                suggestionDiv.innerHTML = `
+                    <span>${displayName}</span>
+                    <span class="${statusColor} font-semibold text-xs">${statusBadge}</span>
+                `;
+
+                suggestionsContainer.appendChild(suggestionDiv);
+            });
+
+            suggestionsContainer.classList.remove('hidden');
+        }
+
+        // Check and display the item status
+        function checkItemStatus(inputKey = null) {
+            const input = inputKey || itemInput.value.trim().toLowerCase();
+            
+            // Reset state for single search
+            resultsDiv.className = 'min-h-[120px] p-5 rounded-lg border flex flex-col items-center justify-center text-center transition-all duration-300';
+            resultsDiv.classList.remove('keep-status', 'bg-lime-900', 'border-lime-700', 'bg-red-900', 'border-red-700', 'bg-stone-700', 'border-stone-600', 'p-4');
+            resultsDiv.classList.add('bg-stone-700', 'border-stone-600', 'justify-center', 'items-center');
+            
+            resultText.classList.remove('text-white', 'text-lime-300', 'text-red-300', 'mb-4');
+            resultText.classList.add('text-stone-400', 'text-2xl');
+            
+            detailsText.classList.remove('hidden');
+            detailsText.style.fontSize = ''; 
+            detailsText.classList.remove('text-white', 'font-bold'); 
+            
+            listContainer.classList.add('hidden');
+
+            if (input.length < 1) {
+                resultText.textContent = activeFilter === null ? 'Start typing or select a letter.' : 'Start typing or select a letter.';
+                detailsText.textContent = '';
+                return;
+            }
+
+            const foundItem = itemDatabase[input];
+
+            if (foundItem) {
+                // Item found!
+                let statusText = foundItem.status;
+                if (foundItem.status.includes("KEEP") && foundItem.requiredTotal !== undefined) {
+                    statusText = `${statusText} (${foundItem.requiredTotal}x Total)`;
+                }
+                
+                resultText.textContent = statusText;
+                
+                let fullDetail = foundItem.detail;
+                
+                if (foundItem.return) {
+                    fullDetail += `<br class="sm:hidden" /><span class="hidden sm:inline"> | </span> <span class="text-sm font-normal">${foundItem.return}</span>`;
+                    detailsText.style.fontSize = '0.9rem'; 
+                }
+
+                detailsText.innerHTML = fullDetail;
+                
+                if (foundItem.status.includes("KEEP")) {
+                    resultsDiv.classList.add('bg-lime-900', 'border-lime-700', 'keep-status');
+                    resultText.classList.add('text-lime-300', 'text-white');
+                } else {
+                    resultsDiv.classList.add('bg-red-900', 'border-red-700');
+                    resultText.classList.add('text-red-300', 'text-white');
+                }
+                
+                detailsText.classList.add('text-white', 'font-bold', 'text-sm'); 
+                suggestionsContainer.classList.add('hidden');
+            } else {
+                resultText.textContent = 'Item not found in database.';
+                detailsText.textContent = 'If this is a common item, please verify its in-game use, or proceed with selling/recycling.';
+            }
+        }
+        
+        // Hide suggestions when clicking outside the input/suggestions
+        document.addEventListener('click', function(e) {
+            if (e.target.id !== 'item-input' && !suggestionsContainer.contains(e.target) && !e.target.classList.contains('alphabet-button')) {
+                suggestionsContainer.classList.add('hidden');
+            }
+        });
+
+        // Initialize the alphabet nav and display the full list on load
+        window.onload = function() {
+            generateAlphabetNav();
+            filterAndDisplayList(null); // Display ALL items initially
+        }
+
+    </script>
+</body>
+</html>
